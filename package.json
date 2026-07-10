@@ -1,0 +1,20 @@
+{
+  "name": "assessment-management",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "check-types": "turbo run check-types",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,jsonc,yml,yaml}\" --ignore-path .gitignore"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.2"
+  },
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=18"
+  }
+}
