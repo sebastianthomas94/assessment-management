@@ -11,6 +11,25 @@ function formatDateTime(iso: string): string {
   }
 }
 
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch {
+    return iso;
+  }
+}
+
+const STATUS_BADGE: Record<string, { badgeClasses: string; dotClasses: string }> = {
+  draft: {
+    badgeClasses: 'bg-surface-container-high text-on-surface-variant border border-outline-variant/30',
+    dotClasses: 'bg-outline',
+  },
+  published: {
+    badgeClasses: 'bg-secondary/10 text-secondary border border-secondary/20',
+    dotClasses: 'bg-secondary',
+  },
+};
+
 // A question carries an answer key (and is therefore graded) when the matching
 // correct* field is set. open_text is never auto-graded.
 function questionCorrectAnswer(q: Question): string | null {
@@ -75,8 +94,6 @@ export default function Reports() {
       .then(({ assessments }) => {
         if (cancelled) return;
         setSummaries(assessments);
-        // Auto-select the most recent assessment if there is one.
-        if (assessments.length > 0) setSelectedId(assessments[0].id);
       })
       .catch((err: unknown) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load assessments.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -111,6 +128,7 @@ export default function Reports() {
   }, [selectedId]);
 
   const activeResponse = responses.find((r) => r.id === activeResponseId) ?? null;
+  const selectedSummary = summaries.find((s) => s.id === selectedId) ?? null;
 
   // Aggregate metrics across all responses using the server-computed score.
   const gradedResponses = responses.filter((r) => r.score);
@@ -184,30 +202,31 @@ export default function Reports() {
     <AppLayout activeKey="reports" topBar={{ searchPlaceholder: 'Search reports...' }} mainClassName="bg-surface-container-low">
       <div className="max-w-[1200px] mx-auto space-y-8 pb-20">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        {selectedId ? (
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <button
+                type="button"
+                onClick={() => setSelectedId(null)}
+                className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container transition-colors font-label-md text-label-md"
+              >
+                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                All assessments
+              </button>
+              <div className="min-w-0">
+                <h2 className="font-display-lg text-display-lg text-on-background truncate">{selectedSummary?.title ?? 'Report'}</h2>
+                <p className="font-body-md text-body-md text-on-surface-variant mt-1">Submitted responses for this assessment.</p>
+              </div>
+            </div>
+          </div>
+        ) : (
           <div>
             <h2 className="font-display-lg text-display-lg text-on-background">Reports</h2>
             <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-              View submitted responses for any of your assessments.
+              Select an assessment to view its submitted responses.
             </p>
           </div>
-          {/* Assessment selector */}
-          <div className="flex items-center gap-3">
-            <label className="font-label-md text-label-md text-on-surface-variant" htmlFor="report-assessment-select">Assessment:</label>
-            <select
-              id="report-assessment-select"
-              className="px-3 py-2 border border-outline-variant rounded-lg bg-surface-container-lowest text-on-surface font-body-md focus:outline-none focus:ring-2 focus:ring-primary"
-              value={selectedId ?? ''}
-              onChange={(e) => setSelectedId(e.target.value || null)}
-              disabled={loading || summaries.length === 0}
-            >
-              {summaries.length === 0 && <option value="">No assessments</option>}
-              {summaries.map((s) => (
-                <option key={s.id} value={s.id}>{s.title}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-20 text-on-surface-variant">
@@ -222,6 +241,45 @@ export default function Reports() {
             <span className="material-symbols-outlined text-outline text-[48px]">bar_chart</span>
             <p className="font-body-lg text-body-lg text-on-surface-variant mt-2">No assessments to report on yet.</p>
             <p className="font-body-md text-body-md text-on-surface-variant">Create and publish an assessment to see responses here.</p>
+          </div>
+        ) : !selectedId ? (
+          /* Assessment picker: click a card to open its report */
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+            {summaries.map((s) => {
+              const badge = STATUS_BADGE[s.status] ?? STATUS_BADGE.draft;
+              return (
+                <button
+                  type="button"
+                  key={s.id}
+                  onClick={() => setSelectedId(s.id)}
+                  className="glass-card rounded-xl p-6 text-left flex flex-col gap-3 hover:border-primary/50 hover:shadow-lg transition-all group focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-label-sm text-label-sm ${badge.badgeClasses}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${badge.dotClasses}`} />
+                      {s.status === 'published' ? 'Published' : 'Draft'}
+                    </span>
+                    <span className="material-symbols-outlined text-outline group-hover:text-primary transition-colors">arrow_forward</span>
+                  </div>
+                  <div>
+                    <h3 className="font-title-lg text-title-lg text-on-surface line-clamp-2">{s.title}</h3>
+                    {s.description && (
+                      <p className="font-body-md text-body-md text-on-surface-variant mt-1 line-clamp-2">{s.description}</p>
+                    )}
+                  </div>
+                  <div className="mt-auto flex items-center gap-4 font-label-sm text-label-sm text-outline pt-2 border-t border-outline-variant/40">
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">quiz</span>
+                      {s.totalQuestions} question{s.totalQuestions === 1 ? '' : 's'}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">calendar_today</span>
+                      {formatDate(s.updatedAt)}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         ) : responses.length === 0 ? (
           <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-12 text-center">
