@@ -370,16 +370,16 @@ export default function Builder() {
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 w-full md:w-auto">
             <button
-              className="px-4 py-2 border border-outline text-on-surface rounded-lg font-label-lg hover:bg-surface-container transition-colors flex items-center gap-2"
+              className="flex-1 md:flex-none justify-center px-4 py-2 border border-outline text-on-surface rounded-lg font-label-lg hover:bg-surface-container transition-colors flex items-center gap-2"
               onClick={() => setLoadCategoriesOpen(true)}
             >
               <span className="material-symbols-outlined text-[20px]">library_add</span>
               Load Categories
             </button>
             <button
-              className="px-4 py-2 bg-primary text-on-primary rounded-lg font-label-lg hover:bg-primary-container transition-colors shadow-sm flex items-center gap-2"
+              className="flex-1 md:flex-none justify-center px-4 py-2 bg-primary text-on-primary rounded-lg font-label-lg hover:bg-primary-container transition-colors shadow-sm flex items-center gap-2"
               onClick={addCategory}
             >
               <span className="material-symbols-outlined text-[20px]">add</span>
@@ -455,8 +455,8 @@ export default function Builder() {
       </div>
 
       {/* Sticky Save Bar */}
-      <div className="fixed bottom-0 left-0 md:left-[280px] right-0 bg-surface/90 backdrop-blur-md border-t border-outline-variant p-4 flex justify-between items-center z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <div className="flex items-center gap-3 text-on-surface-variant">
+      <div className="fixed bottom-0 left-0 md:left-[280px] right-0 bg-surface/90 backdrop-blur-md border-t border-outline-variant p-4 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-center z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="hidden sm:flex items-center gap-3 text-on-surface-variant">
           <span className="material-symbols-outlined text-sm">edit_note</span>
           <span className="font-body-md text-sm">
             {categories.length} {categories.length === 1 ? 'category' : 'categories'}{' · '}
@@ -464,16 +464,16 @@ export default function Builder() {
             {categories.reduce((s, c) => s + c.factors.reduce((fs, f) => fs + f.questions.length, 0), 0)} questions
           </span>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 w-full sm:w-auto">
           <button
-            className="px-6 py-2 border border-outline text-on-surface font-label-lg rounded-lg hover:bg-surface-container transition-colors"
+            className="flex-1 sm:flex-none px-6 py-2 border border-outline text-on-surface font-label-lg rounded-lg hover:bg-surface-container transition-colors"
             onClick={handleDiscard}
             disabled={isSaving || (!isEditing && categories.length === 0 && !title)}
           >
             {isEditing ? 'Cancel' : 'Discard Draft'}
           </button>
           <button
-            className={`px-6 py-2 ${isSaving ? 'bg-secondary' : 'bg-primary'} text-on-primary font-label-lg rounded-lg hover:bg-primary-container transition-all shadow-sm flex items-center gap-2 disabled:opacity-60`}
+            className={`flex-1 sm:flex-none justify-center px-6 py-2 ${isSaving ? 'bg-secondary' : 'bg-primary'} text-on-primary font-label-lg rounded-lg hover:bg-primary-container transition-all shadow-sm flex items-center gap-2 disabled:opacity-60`}
             onClick={handleSave}
             disabled={isSaving}
           >
