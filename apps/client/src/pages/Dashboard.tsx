@@ -228,13 +228,23 @@ export default function Dashboard() {
                                   </a>
                                 </>
                               ) : (
-                                <button
-                                  className="px-3 py-1.5 text-secondary border border-secondary/30 rounded text-label-md hover:bg-secondary/5 transition-colors font-medium disabled:opacity-50"
-                                  title="Publish this assessment to make it launchable"
-                                  onClick={() => handlePublish(row.id)}
-                                >
-                                  Publish
-                                </button>
+                                <>
+                                  <button
+                                    className="px-3 py-1.5 text-primary border border-primary/30 rounded text-label-md hover:bg-primary/5 transition-colors font-medium inline-flex items-center gap-1"
+                                    title="Edit this draft assessment"
+                                    onClick={() => navigate(`/builder/${row.id}`)}
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="px-3 py-1.5 text-secondary border border-secondary/30 rounded text-label-md hover:bg-secondary/5 transition-colors font-medium disabled:opacity-50"
+                                    title="Publish this assessment to make it launchable"
+                                    onClick={() => handlePublish(row.id)}
+                                  >
+                                    Publish
+                                  </button>
+                                </>
                               )}
                               <Link
                                 to="/reports"

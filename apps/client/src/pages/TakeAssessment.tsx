@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getPublicAssessment, submitPublicResponse } from '../api/public';
 import { ApiError } from '../api/client';
-import type { Answer, Assessment, Question, QuestionType } from '../types/assessment';
+import type { Answer, Assessment, Question, QuestionType, Score } from '../types/assessment';
 
 const EMPTY_ANSWER = Symbol(' unanswered');
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -22,6 +22,7 @@ export default function TakeAssessment() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [resultScore, setResultScore] = useState<Score | null>(null);
   const [identityOpen, setIdentityOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -98,7 +99,8 @@ export default function TakeAssessment() {
           case 'open_text': return { questionId: q.id, type: q.type, textValue: String(entry.value) };
         }
       });
-      await submitPublicResponse(assessmentId, { name: name.trim(), email: email.trim(), answers: payload });
+      const { response } = await submitPublicResponse(assessmentId, { name: name.trim(), email: email.trim(), answers: payload });
+      setResultScore(response.score);
       setIdentityOpen(false);
       setSubmitted(true);
     } catch (err) {
@@ -216,6 +218,14 @@ export default function TakeAssessment() {
         <span className="material-symbols-outlined text-secondary text-[64px]">check_circle</span>
         <h2 className="font-headline-sm text-headline-sm text-on-surface">Thank you, {name.trim()}!</h2>
         <p className="font-body-md text-body-md text-on-surface-variant">Your responses for “{assessment.title}” have been submitted.</p>
+        {resultScore && (
+          <div className="mt-2 flex flex-col items-center gap-1">
+            <div className="text-4xl font-bold text-primary">{resultScore.percentage}%</div>
+            <p className="font-body-md text-body-md text-on-surface-variant">
+              You scored {resultScore.earned} out of {resultScore.max} graded {resultScore.max === 1 ? 'question' : 'questions'} correctly.
+            </p>
+          </div>
+        )}
         <p className="font-body-md text-body-md text-on-surface-variant">You can now close this tab.</p>
       </div>
     );

@@ -11,32 +11,34 @@ function formatDateTime(iso: string): string {
   }
 }
 
-// Build a lookup of questions indexed by id from the assessment so we can
-// render each answer with its question text and type.
-function indexQuestions(assessment: Assessment): Record<string, Question> {
-  const map: Record<string, Question> = {};
-  for (const cat of assessment.categories) for (const f of cat.factors) for (const q of f.questions) map[q.id] = q;
-  return map;
+// A question carries an answer key (and is therefore graded) when the matching
+// correct* field is set. open_text is never auto-graded.
+function questionCorrectAnswer(q: Question): string | null {
+  switch (q.type) {
+    case 'multiple_choice':
+      return q.correctOption != null && q.correctOption !== '' ? q.correctOption : null;
+    case 'rating_scale':
+      return q.correctRating != null ? String(q.correctRating) : null;
+    case 'boolean':
+      return q.correctBoolean != null ? (q.correctBoolean ? 'Yes' : 'No') : null;
+    default:
+      return null;
+  }
 }
 
-// Compute a simple gradeable score: rating_scale questions sum their value out
-// of scaleMax; boolean questions give 1 for Yes, 0 for No. Other types are
-// informational. Returns {earned, max, hasGradeable}.
-function scoreResponse(answers: Answer[], questionMap: Record<string, Question>): { earned: number; max: number; hasGradeable: boolean } {
-  let earned = 0;
-  let max = 0;
-  for (const a of answers) {
-    const q = questionMap[a.questionId];
-    if (!q) continue;
-    if (a.type === 'rating_scale') {
-      max += q.scaleMax ?? 5;
-      earned += Math.min(Number(a.ratingValue ?? 0), q.scaleMax ?? 5);
-    } else if (a.type === 'boolean') {
-      max += 1;
-      earned += a.booleanValue ? 1 : 0;
-    }
+// Given a graded question and an answer, report whether the answer is correct.
+// Returns null when the question isn't graded (no answer key / open_text).
+function isAnswerCorrect(q: Question, a: Answer): boolean | null {
+  switch (q.type) {
+    case 'multiple_choice':
+      return q.correctOption != null && q.correctOption !== '' ? a.selectedOption === q.correctOption : null;
+    case 'rating_scale':
+      return q.correctRating != null ? a.ratingValue === q.correctRating : null;
+    case 'boolean':
+      return q.correctBoolean != null ? a.booleanValue === q.correctBoolean : null;
+    default:
+      return null;
   }
-  return { earned, max, hasGradeable: max > 0 };
 }
 
 function answerDisplay(a: Answer): string {
@@ -108,26 +110,18 @@ export default function Reports() {
     return () => { cancelled = true; };
   }, [selectedId]);
 
-  const questionMap = assessment ? indexQuestions(assessment) : {};
   const activeResponse = responses.find((r) => r.id === activeResponseId) ?? null;
 
-  // Aggregate metrics across all responses.
+  // Aggregate metrics across all responses using the server-computed score.
+  const gradedResponses = responses.filter((r) => r.score);
   const metrics = {
     submissions: responses.length,
     avgScore: 0,
-    completionRate: 0,
+    completionRate: responses.length > 0 ? 100 : 0, // all submitted responses are complete by design
   };
-  if (responses.length > 0) {
-    const scored = responses.map((r) => scoreResponse(r.answers, questionMap));
-    const gradeable = scored.filter((s) => s.hasGradeable);
-    if (gradeable.length > 0) {
-      const avgPct = gradeable.reduce((sum, s) => sum + (s.max > 0 ? (s.earned / s.max) * 100 : 0), 0) / gradeable.length;
-      metrics.avgScore = Math.round(avgPct * 10) / 10;
-      metrics.completionRate = 100;
-    } else {
-      metrics.avgScore = 0;
-      metrics.completionRate = 100; // all submitted responses are complete by design
-    }
+  if (gradedResponses.length > 0) {
+    const avgPct = gradedResponses.reduce((sum, r) => sum + (r.score?.percentage ?? 0), 0) / gradedResponses.length;
+    metrics.avgScore = Math.round(avgPct * 10) / 10;
   }
 
   // Reuse the assessment's category→factor→question structure to render the
@@ -140,11 +134,21 @@ export default function Reports() {
         </div>
       );
     }
+    const correct = isAnswerCorrect(q, ans);
+    const expected = questionCorrectAnswer(q);
     return (
       <div className="bg-surface-container-lowest p-4 rounded-lg border border-outline-variant shadow-sm relative overflow-hidden">
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-secondary" />
+        <div className={`absolute left-0 top-0 bottom-0 w-1 ${correct === true ? 'bg-secondary' : correct === false ? 'bg-error' : 'bg-outline-variant'}`} />
         <div className="flex items-center justify-between mb-1">
-          <span className="font-label-sm text-label-sm text-outline">{TYPE_LABEL[ans.type] ?? ans.type}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-label-sm text-label-sm text-outline">{TYPE_LABEL[ans.type] ?? ans.type}</span>
+            {correct !== null && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${correct ? 'bg-secondary/15 text-secondary' : 'bg-error/15 text-error'}`}>
+                <span className="material-symbols-outlined text-[14px]">{correct ? 'check' : 'close'}</span>
+                {correct ? 'Correct' : 'Incorrect'}
+              </span>
+            )}
+          </div>
           {ans.type === 'rating_scale' && (
             <span className="font-label-md text-label-md font-bold text-secondary">
               {ans.ratingValue}/{q.scaleMax ?? 5}
@@ -157,6 +161,12 @@ export default function Reports() {
           )}
         </div>
         <p className="font-body-md text-body-md text-on-surface font-medium mb-2">{q.text}</p>
+        {correct === false && expected !== null && (
+          <p className="font-label-md text-label-md text-on-surface-variant mb-2 flex items-center gap-1">
+            <span className="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+            Correct answer: <span className="font-bold text-on-surface">{expected}</span>
+          </p>
+        )}
         <p className="font-body-md text-body-md text-on-surface-variant bg-surface-container-low p-3 rounded border border-surface-variant">
           {ans.type === 'open_text' ? (ans.textValue || '—') : ans.type === 'multiple_choice' ? (ans.selectedOption || '—') : ''}
         </p>
@@ -228,8 +238,7 @@ export default function Reports() {
                 <h3 className="font-display-lg text-display-lg text-primary">{metrics.submissions}</h3>
               </div>
               {(() => {
-                const gradeable = responses.map((r) => scoreResponse(r.answers, questionMap)).filter((s) => s.hasGradeable);
-                return gradeable.length > 0 ? (
+                return gradedResponses.length > 0 ? (
                   <div className="glass-card rounded-xl p-6 relative overflow-hidden group">
                     <p className="font-label-lg text-label-lg text-on-surface-variant mb-2">Average Score</p>
                     <div className="flex items-baseline gap-2">
@@ -265,13 +274,12 @@ export default function Reports() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-2 max-h-[540px]">
                   {responses.map((r) => {
-                    const score = scoreResponse(r.answers, questionMap);
                     const isActive = r.id === activeResponseId;
                     return (
                       <div key={r.id} className={`p-4 rounded-lg cursor-pointer hover:bg-surface-container transition-colors ${isActive ? 'bg-surface-container border-l-4 border-primary' : 'border border-transparent'}`} onClick={() => setActiveResponseId(r.id)}>
                         <div className="flex justify-between items-start mb-1">
                           <h4 className="font-label-lg text-label-lg text-on-surface">{r.respondent.name}</h4>
-                          {score.hasGradeable && <span className="font-label-md text-label-md font-bold text-on-surface-variant">{Math.round((score.earned / score.max) * 100)}/100</span>}
+                          {r.score && <span className="font-label-md text-label-md font-bold text-on-surface-variant">{r.score.percentage}/100</span>}
                         </div>
                         <p className="font-body-md text-body-md text-on-surface-variant text-sm mb-2">{r.respondent.email}</p>
                         <div className="flex items-center gap-2 font-label-sm text-label-sm text-outline">
@@ -292,15 +300,14 @@ export default function Reports() {
                         <h3 className="font-headline-sm text-headline-sm text-on-surface">{activeResponse.respondent.name}</h3>
                         <p className="font-body-md text-body-md text-on-surface-variant">{activeResponse.respondent.email} • Submitted: {formatDateTime(activeResponse.submittedAt)}</p>
                       </div>
-                      {(() => {
-                        const score = scoreResponse(activeResponse.answers, questionMap);
-                        return score.hasGradeable ? (
-                          <div className="flex flex-col items-end">
-                            <div className="text-3xl font-bold text-primary">{Math.round((score.earned / score.max) * 100)}<span className="text-lg text-on-surface-variant">/100</span></div>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-container-high text-on-surface">Score</span>
-                          </div>
-                        ) : null;
-                      })()}
+                      {activeResponse.score ? (
+                        <div className="flex flex-col items-end">
+                          <div className="text-3xl font-bold text-primary">{activeResponse.score.percentage}<span className="text-lg text-on-surface-variant">/100</span></div>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-container-high text-on-surface">
+                            {activeResponse.score.earned}/{activeResponse.score.max} correct
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="flex-1 overflow-y-auto p-6 bg-surface-container-low max-h-[540px]">
                       {assessment.categories.map((cat) => {
