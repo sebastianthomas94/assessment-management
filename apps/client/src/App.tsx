@@ -5,6 +5,7 @@ import Builder from './pages/Builder';
 import Dashboard from './pages/Dashboard';
 import Reports from './pages/Reports';
 import LaunchPad from './pages/LaunchPad';
+import TakeAssessment from './pages/TakeAssessment';
 import NotFound from './pages/NotFound';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -28,6 +29,8 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Public — respondents take assessments without logging in. */}
+          <Route path="/take/:assessmentId" element={<TakeAssessment />} />
           <Route path="/auth" element={<AuthRoute />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/builder" element={<Builder />} />
