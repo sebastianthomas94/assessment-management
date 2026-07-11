@@ -32,3 +32,6 @@ pnpm-debug.log*
 coverage
 *.pem
 stitch_dynamic_assessment_manager
+
+assessment-instructions.txt
+
