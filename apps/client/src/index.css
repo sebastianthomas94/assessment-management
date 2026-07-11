@@ -8,6 +8,11 @@
 
   .material-symbols-outlined {
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    /* Hide the raw ligature text until the icon font is loaded (see main.tsx). */
+    visibility: hidden;
+  }
+  html.symbols-ready .material-symbols-outlined {
+    visibility: visible;
   }
   .material-symbols-outlined[style*="'FILL' 1"] {
     font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
