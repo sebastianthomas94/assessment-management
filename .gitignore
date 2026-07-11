@@ -35,3 +35,5 @@ stitch_dynamic_assessment_manager
 
 assessment-instructions.txt
 
+.vercel
+.env*
