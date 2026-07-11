@@ -26,6 +26,11 @@ export interface IQuestion {
   required: boolean;
   options?: string[];
   scaleMax?: number;
+  // Optional answer key. When set, the question is auto-graded on submission.
+  // open_text has no correct-answer field (graded via the future AI feature).
+  correctOption?: string; // multiple_choice: must equal one of `options`
+  correctRating?: number; // rating_scale: 1..scaleMax
+  correctBoolean?: boolean; // boolean
 }
 
 export interface IFactor {
@@ -63,10 +68,18 @@ export interface IAnswer {
   textValue?: string;
 }
 
+/** Computed grading result for a submitted response. */
+export interface IScore {
+  earned: number; // number of gradeable questions answered correctly
+  max: number; // number of gradeable questions in the response
+  percentage: number; // Math.round((earned / max) * 100)
+}
+
 export interface IResponse {
   assessment: string;
   respondentName: string;
   respondentEmail: string;
   answers: IAnswer[];
+  score?: IScore;
   submittedAt: Date;
 }

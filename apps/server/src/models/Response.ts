@@ -1,5 +1,14 @@
 import { model, type Document, Schema, Types } from "mongoose";
-import { QUESTION_TYPES, type IAnswer } from "../types/assessment.js";
+import { QUESTION_TYPES, type IAnswer, type IScore } from "../types/assessment.js";
+
+const scoreSchema = new Schema<IScore>(
+  {
+    earned: { type: Number, required: true },
+    max: { type: Number, required: true },
+    percentage: { type: Number, required: true },
+  },
+  { _id: false }
+);
 
 const answerSchema = new Schema<IAnswer>(
   {
@@ -18,6 +27,7 @@ export interface IResponseDoc extends Document {
   respondentName: string;
   respondentEmail: string;
   answers: IAnswer[];
+  score?: IScore;
   submittedAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -35,6 +45,8 @@ const responseSchema = new Schema<IResponseDoc>(
     respondentName: { type: String, required: true, trim: true },
     respondentEmail: { type: String, required: true, trim: true, lowercase: true },
     answers: { type: [answerSchema], required: true },
+    // Grading result computed at submission; absent when nothing is gradeable.
+    score: { type: scoreSchema },
     submittedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }

@@ -20,6 +20,11 @@ const questionSchema = new Schema<IQuestion>(
     required: { type: Boolean, default: true },
     options: { type: [String] },
     scaleMax: { type: Number, default: 5, min: 2, max: 10 },
+    // Optional answer key (validated at the application layer). Absent =
+    // informational (not scored). open_text has no correct-answer field.
+    correctOption: { type: String },
+    correctRating: { type: Number, min: 1 },
+    correctBoolean: { type: Boolean },
   },
   { _id: false }
 );
