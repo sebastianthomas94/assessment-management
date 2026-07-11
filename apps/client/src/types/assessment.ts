@@ -21,6 +21,11 @@ export interface Question {
   required: boolean;
   options?: string[];
   scaleMax?: number;
+  // Optional answer key. When set, the question is auto-graded on submission.
+  // open_text has no correct-answer field (graded via the future AI feature).
+  correctOption?: string; // multiple_choice: must equal one of `options`
+  correctRating?: number; // rating_scale: 1..scaleMax
+  correctBoolean?: boolean; // boolean
 }
 
 export interface Factor {
@@ -69,10 +74,18 @@ export interface Answer {
   textValue?: string;
 }
 
+/** Computed grading result for a submitted response (null when no gradeable questions). */
+export interface Score {
+  earned: number;
+  max: number;
+  percentage: number;
+}
+
 export interface ResponseSummary {
   id: string;
   respondent: { name: string; email: string };
   answers: Answer[];
+  score: Score | null;
   submittedAt: string;
 }
 

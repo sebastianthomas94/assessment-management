@@ -44,6 +44,10 @@ export function validateAssessmentInput(input: {
           text?: string;
           type?: string;
           options?: unknown;
+          scaleMax?: unknown;
+          correctOption?: unknown;
+          correctRating?: unknown;
+          correctBoolean?: unknown;
         };
         if (!q.text?.trim()) {
           return {
@@ -66,6 +70,35 @@ export function validateAssessmentInput(input: {
               message: `Multiple-choice question #${qi + 1} in "${factor.title}" needs at least two options.`,
             };
           }
+          // Answer key is optional; when set it must be one of the options.
+          if (q.correctOption !== undefined && q.correctOption !== "") {
+            if (!nonEmpty.includes(q.correctOption as string)) {
+              return {
+                valid: false,
+                message: `The correct answer for question #${qi + 1} in "${factor.title}" must be one of its options.`,
+              };
+            }
+          }
+        }
+        if (q.type === "rating_scale" && q.correctRating !== undefined) {
+          const scaleMax = typeof q.scaleMax === "number" ? q.scaleMax : 5;
+          const cr = q.correctRating;
+          if (typeof cr !== "number" || !Number.isInteger(cr) || cr < 1 || cr > scaleMax) {
+            return {
+              valid: false,
+              message: `The correct answer for question #${qi + 1} in "${factor.title}" must be between 1 and ${scaleMax}.`,
+            };
+          }
+        }
+        if (
+          q.type === "boolean" &&
+          q.correctBoolean !== undefined &&
+          typeof q.correctBoolean !== "boolean"
+        ) {
+          return {
+            valid: false,
+            message: `The correct answer for question #${qi + 1} in "${factor.title}" must be Yes or No.`,
+          };
         }
         totalQuestions += 1;
       }

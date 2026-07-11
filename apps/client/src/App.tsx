@@ -34,6 +34,7 @@ export default function App() {
           <Route path="/auth" element={<AuthRoute />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/builder" element={<Builder />} />
+            <Route path="/builder/:id" element={<Builder />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/launch-pad" element={<LaunchPad />} />

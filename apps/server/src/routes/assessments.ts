@@ -235,6 +235,7 @@ router.get(
             email: d.respondentEmail,
           },
           answers: d.answers,
+          score: d.score ?? null,
           submittedAt: d.submittedAt,
         })),
       });

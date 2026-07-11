@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import AppLayout from '../components/AppLayout';
 import Accordion from '../components/Accordion';
 import QuestionModal, { type QuestionTypeConfig } from '../components/QuestionModal';
 import LoadCategoriesModal from '../components/LoadCategoriesModal';
-import { createAssessment } from '../api/assessments';
+import PaywallModal from '../components/PaywallModal';
+import { createAssessment, getAssessment, updateAssessment } from '../api/assessments';
 import { ApiError } from '../api/client';
 import { type Question, type Factor, type Category, type QuestionType } from '../types/assessment';
 
@@ -52,11 +53,14 @@ const EMPTY_STATE: { title: string; description: string; categories: Category[] 
 
 export default function Builder() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const isEditing = Boolean(id);
   const [title, setTitle] = useState(EMPTY_STATE.title);
   const [description, setDescription] = useState(EMPTY_STATE.description);
   const [categories, setCategories] = useState<Category[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [loadCategoriesOpen, setLoadCategoriesOpen] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const activeFactorIdRef = useState<string | null>(null);
   const [activeFactorId, setActiveFactorId] = activeFactorIdRef;
   const [isSaving, setIsSaving] = useState(false);
@@ -64,6 +68,9 @@ export default function Builder() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastError, setToastError] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // When an :id is present we're editing an existing draft: hydrate from the API.
+  const [loading, setLoading] = useState(isEditing);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // ---------- toast helper ----------
   const showToastMsg = (msg: string, isError = false) => {
@@ -72,6 +79,37 @@ export default function Builder() {
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3500);
   };
+
+  // ---------- load existing draft (edit mode) ----------
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    getAssessment(id)
+      .then(({ assessment }) => {
+        if (cancelled) return;
+        // Only drafts are editable; published assessments may already have responses.
+        if (assessment.status !== 'draft') {
+          showToastMsg('Published assessments cannot be edited.', true);
+          navigate('/dashboard');
+          return;
+        }
+        setTitle(assessment.title);
+        setDescription(assessment.description);
+        setCategories(assessment.categories);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : 'Failed to load assessment.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   // ---------- category CRED ----------
   const addCategory = () => setCategories((cs) => [...cs, { ...newCategory() }]);
@@ -155,9 +193,16 @@ export default function Builder() {
                 f.id === factorId
                   ? {
                       ...f,
-                      questions: f.questions.map((q) =>
-                        q.id === qId ? { ...q, options: q.options?.map((o, i) => (i === optIdx ? value : o)) } : q
-                      ),
+                      questions: f.questions.map((q) => {
+                        if (q.id !== qId) return q;
+                        const oldOpt = q.options?.[optIdx];
+                        return {
+                          ...q,
+                          options: q.options?.map((o, i) => (i === optIdx ? value : o)),
+                          // Keep the answer key pointing at the same option after a rename.
+                          correctOption: q.correctOption === oldOpt ? value : q.correctOption,
+                        };
+                      }),
                     }
                   : f
               ),
@@ -176,9 +221,16 @@ export default function Builder() {
                 f.id === factorId
                   ? {
                       ...f,
-                      questions: f.questions.map((q) =>
-                        q.id === qId ? { ...q, options: q.options?.filter((_, i) => i !== optIdx) } : q
-                      ),
+                      questions: f.questions.map((q) => {
+                        if (q.id !== qId) return q;
+                        const removed = q.options?.[optIdx];
+                        return {
+                          ...q,
+                          options: q.options?.filter((_, i) => i !== optIdx),
+                          // Drop the answer key if its option was removed.
+                          correctOption: q.correctOption === removed ? undefined : q.correctOption,
+                        };
+                      }),
                     }
                   : f
               ),
@@ -216,6 +268,21 @@ export default function Builder() {
     setSaveError(null);
   };
 
+  // In edit mode "Discard" cancels back to the dashboard; in create mode it clears the form.
+  const handleDiscard = () => {
+    if (isEditing) {
+      navigate('/dashboard');
+      return;
+    }
+    resetBuilder();
+  };
+
+  // Open-text answers can't be auto-graded — surface the AI-evaluation paywall
+  // when the assessment contains at least one.
+  const hasOpenText = categories.some((c) =>
+    c.factors.some((f) => f.questions.some((q) => q.type === 'open_text'))
+  );
+
   const handleSave = async () => {
     setSaveError(null);
     if (!title.trim()) {
@@ -233,8 +300,14 @@ export default function Builder() {
 
     setIsSaving(true);
     try {
-      await createAssessment({ title: title.trim(), description: description.trim(), categories });
-      showToastMsg('Assessment saved successfully!');
+      const payload = { title: title.trim(), description: description.trim(), categories };
+      if (isEditing && id) {
+        await updateAssessment(id, payload);
+        showToastMsg('Assessment updated successfully!');
+      } else {
+        await createAssessment(payload);
+        showToastMsg('Assessment saved successfully!');
+      }
       resetBuilder();
       navigate('/dashboard');
     } catch (err) {
@@ -245,6 +318,36 @@ export default function Builder() {
       setIsSaving(false);
     }
   };
+
+  if (loading) {
+    return (
+      <AppLayout activeKey="builder" topBar={{ searchPlaceholder: 'Search...' }}>
+        <div className="max-w-[1024px] mx-auto flex flex-col items-center justify-center py-32 text-on-surface-variant">
+          <span className="material-symbols-outlined animate-spin text-primary text-[40px]">progress_activity</span>
+          <p className="font-body-lg text-body-lg mt-3">Loading assessment...</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <AppLayout activeKey="builder" topBar={{ searchPlaceholder: 'Search...' }}>
+        <div className="max-w-[1024px] mx-auto">
+          <div className="bg-error-container/30 border border-error/30 rounded-xl p-8 text-center">
+            <span className="material-symbols-outlined text-error text-[32px]">cloud_off</span>
+            <p className="font-body-lg text-body-lg text-error mt-2">{loadError}</p>
+            <button
+              className="mt-4 px-4 py-2 border border-error text-error rounded-lg hover:bg-error-container transition-colors"
+              onClick={() => navigate('/dashboard')}
+            >
+              Back to dashboard
+            </button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout activeKey="builder" topBar={{ searchPlaceholder: 'Search...' }}>
@@ -289,6 +392,29 @@ export default function Builder() {
           <div className="mb-6 p-3 rounded-lg bg-error-container/40 border border-error/30 text-error flex items-center gap-2">
             <span className="material-symbols-outlined text-[20px]">error</span>
             <span className="font-body-md text-body-md">{saveError}</span>
+          </div>
+        )}
+
+        {/* AI text-evaluation paywall banner (shown when open-text questions exist) */}
+        {hasOpenText && (
+          <div className="mb-6 p-4 rounded-xl border border-primary/30 bg-primary-container/20 flex flex-col sm:flex-row sm:items-center gap-3">
+            <span className="material-symbols-outlined text-primary text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
+            <div className="flex-1">
+              <p className="font-title-md text-title-md text-on-surface flex items-center gap-2">
+                Auto-grade open-text answers
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-tertiary-container text-on-tertiary">Coming soon</span>
+              </p>
+              <p className="font-body-md text-body-md text-on-surface-variant">
+                Open-text answers aren&apos;t scored automatically. Unlock AI text evaluation to grade them against a model answer.
+              </p>
+            </div>
+            <button
+              className="px-4 py-2 bg-primary text-on-primary rounded-lg font-label-lg hover:bg-primary-container transition-colors shadow-sm flex items-center gap-2 whitespace-nowrap"
+              onClick={() => setPaywallOpen(true)}
+            >
+              <span className="material-symbols-outlined text-[20px]">lock_open</span>
+              Unlock AI evaluation
+            </button>
           </div>
         )}
 
@@ -341,10 +467,10 @@ export default function Builder() {
         <div className="flex gap-3">
           <button
             className="px-6 py-2 border border-outline text-on-surface font-label-lg rounded-lg hover:bg-surface-container transition-colors"
-            onClick={resetBuilder}
-            disabled={isSaving || (categories.length === 0 && !title)}
+            onClick={handleDiscard}
+            disabled={isSaving || (!isEditing && categories.length === 0 && !title)}
           >
-            Discard Draft
+            {isEditing ? 'Cancel' : 'Discard Draft'}
           </button>
           <button
             className={`px-6 py-2 ${isSaving ? 'bg-secondary' : 'bg-primary'} text-on-primary font-label-lg rounded-lg hover:bg-primary-container transition-all shadow-sm flex items-center gap-2 disabled:opacity-60`}
@@ -352,7 +478,7 @@ export default function Builder() {
             disabled={isSaving}
           >
             <span className="material-symbols-outlined text-[20px]">{isSaving ? 'progress_activity' : 'save'}</span>
-            {isSaving ? 'Saving...' : 'Save Assessment'}
+            {isSaving ? 'Saving...' : isEditing ? 'Update Assessment' : 'Save Assessment'}
           </button>
         </div>
       </div>
@@ -360,6 +486,8 @@ export default function Builder() {
       <QuestionModal isOpen={modalOpen} onClose={() => { setModalOpen(false); setActiveFactorId(null); }} onConfirm={handleQuestionConfig} />
 
       <LoadCategoriesModal isOpen={loadCategoriesOpen} onClose={() => setLoadCategoriesOpen(false)} onAppend={appendCategories} />
+
+      <PaywallModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} />
 
       {/* Success / Error Toast */}
       <div
@@ -676,47 +804,114 @@ function QuestionRow({ question, onQuestionChange, onDeleteQuestion, onSetOption
                   </button>
                   {showOptions && (
                     <div className="mt-2 space-y-2 ml-2">
-                      {question.options?.map((opt, oi) => (
-                        <div key={oi} className="flex items-center gap-2">
-                          <input
-                            className="flex-1 px-2 py-1 text-sm border border-outline-variant rounded bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary"
-                            value={opt}
-                            onChange={(e) => onSetOption(oi, e.target.value)}
-                          />
-                          <button
-                            className="p-0.5 text-on-surface-variant hover:text-error rounded"
-                            title="Remove option"
-                            onClick={() => onRemoveOption(oi)}
-                            disabled={(question.options?.length ?? 0) <= 2}
-                          >
-                            <span className="material-symbols-outlined text-[18px]">remove_circle_outline</span>
-                          </button>
-                        </div>
-                      ))}
+                      {question.options?.map((opt, oi) => {
+                        const isCorrect = opt !== '' && question.correctOption === opt;
+                        return (
+                          <div key={oi} className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              className={`p-0.5 rounded transition-colors ${isCorrect ? 'text-secondary' : 'text-outline hover:text-secondary'}`}
+                              title={isCorrect ? 'Correct answer (click to unset)' : 'Mark as correct answer'}
+                              onClick={() => onQuestionChange({ correctOption: isCorrect ? undefined : opt })}
+                            >
+                              <span className="material-symbols-outlined text-[18px]" style={isCorrect ? { fontVariationSettings: "'FILL' 1" } : undefined}>
+                                {isCorrect ? 'check_circle' : 'radio_button_unchecked'}
+                              </span>
+                            </button>
+                            <input
+                              className="flex-1 px-2 py-1 text-sm border border-outline-variant rounded bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary"
+                              value={opt}
+                              onChange={(e) => onSetOption(oi, e.target.value)}
+                            />
+                            <button
+                              className="p-0.5 text-on-surface-variant hover:text-error rounded"
+                              title="Remove option"
+                              onClick={() => onRemoveOption(oi)}
+                              disabled={(question.options?.length ?? 0) <= 2}
+                            >
+                              <span className="material-symbols-outlined text-[18px]">remove_circle_outline</span>
+                            </button>
+                          </div>
+                        );
+                      })}
                       <button
                         className="text-xs text-primary flex items-center gap-1 hover:underline disabled:opacity-50"
                         onClick={onAppendOption}
                       >
                         <span className="material-symbols-outlined text-[14px]">add</span> Add option
                       </button>
+                      <p className="text-[11px] text-on-surface-variant flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[14px] text-secondary">check_circle</span>
+                        Mark the correct option to auto-score this question (optional).
+                      </p>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Scale config for rating_scale */}
-              {question.type === 'rating_scale' && (
-                <div className="mt-2 text-xs text-on-surface-variant flex items-center gap-2">
-                  <span>Scale 1 to</span>
-                  <input
-                    type="number"
-                    min={2}
-                    max={10}
-                    className="w-16 px-2 py-0.5 border border-outline-variant rounded bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary"
-                    value={question.scaleMax ?? 5}
-                    onChange={(e) => onQuestionChange({ scaleMax: Math.max(2, Math.min(10, Number(e.target.value) || 5)) })}
-                  />
-                </div>
+              {/* Scale config + correct answer for rating_scale */}
+              {question.type === 'rating_scale' && (() => {
+                const scaleMax = question.scaleMax ?? 5;
+                return (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-on-surface-variant">
+                    <div className="flex items-center gap-2">
+                      <span>Scale 1 to</span>
+                      <input
+                        type="number"
+                        min={2}
+                        max={10}
+                        className="w-16 px-2 py-0.5 border border-outline-variant rounded bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary"
+                        value={scaleMax}
+                        onChange={(e) => {
+                          const nextMax = Math.max(2, Math.min(10, Number(e.target.value) || 5));
+                          onQuestionChange({
+                            scaleMax: nextMax,
+                            // Drop the answer key if it no longer fits the scale.
+                            correctRating:
+                              question.correctRating !== undefined && question.correctRating > nextMax
+                                ? undefined
+                                : question.correctRating,
+                          });
+                        }}
+                      />
+                    </div>
+                    <label className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[14px] text-secondary">check_circle</span>
+                      Correct answer
+                      <select
+                        className="px-2 py-0.5 border border-outline-variant rounded bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary"
+                        value={question.correctRating ?? ''}
+                        onChange={(e) => onQuestionChange({ correctRating: e.target.value === '' ? undefined : Number(e.target.value) })}
+                      >
+                        <option value="">Not graded</option>
+                        {Array.from({ length: scaleMax }, (_, i) => i + 1).map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                );
+              })()}
+
+              {/* Correct answer for boolean */}
+              {question.type === 'boolean' && (
+                <label className="mt-2 flex items-center gap-2 text-xs text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[14px] text-secondary">check_circle</span>
+                  Correct answer
+                  <select
+                    className="px-2 py-0.5 border border-outline-variant rounded bg-surface-container-lowest focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={question.correctBoolean === undefined ? '' : question.correctBoolean ? 'yes' : 'no'}
+                    onChange={(e) =>
+                      onQuestionChange({
+                        correctBoolean: e.target.value === '' ? undefined : e.target.value === 'yes',
+                      })
+                    }
+                  >
+                    <option value="">Not graded</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </label>
               )}
             </div>
           </div>
