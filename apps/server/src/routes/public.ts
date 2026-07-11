@@ -5,6 +5,7 @@ import {
   validateRespondent,
   validateResponseInput,
 } from "../utils/assessmentValidation.js";
+import { scoreAnswers } from "../utils/scoring.js";
 import type { IAnswer } from "../types/assessment.js";
 
 /**
@@ -66,17 +67,22 @@ router.post(
         return;
       }
 
+      // Evaluate the submission against the assessment's answer keys.
+      const score = scoreAnswers(assessment, answers as IAnswer[]);
+
       const doc = await ResponseModel.create({
         assessment: String(req.params.id),
         respondentName: name.trim(),
         respondentEmail: email.trim().toLowerCase(),
         answers: answers as IAnswer[],
+        score: score ?? undefined,
         submittedAt: new Date(),
       });
 
       res.status(201).json({
         response: {
           id: String(doc._id),
+          score: doc.score ?? null,
           submittedAt: doc.submittedAt,
         },
       });
