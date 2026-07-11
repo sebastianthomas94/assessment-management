@@ -5,12 +5,15 @@ import { validateAuthInput } from "../utils/validation.js";
 
 const router = Router();
 
-// httpOnly, same-site=lax cookie lives 7 days (must match JWT expiry).
+// httpOnly cookie lives 7 days (must match JWT expiry). In production the
+// client (Vercel) and API (Render) live on different origins, so the cookie
+// must be SameSite=None; Secure for the browser to send it cross-site.
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const isProd = process.env.NODE_ENV === "production";
 const cookieOptions: CookieOptions = {
   httpOnly: true,
-  sameSite: "lax",
-  secure: process.env.NODE_ENV === "production",
+  sameSite: isProd ? "none" : "lax",
+  secure: isProd,
   maxAge: COOKIE_MAX_AGE,
 };
 
