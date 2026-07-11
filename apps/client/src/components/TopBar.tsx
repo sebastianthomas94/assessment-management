@@ -1,3 +1,6 @@
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
 interface TopBarProps {
   /** Optional secondary label shown after the brand (e.g. "Launch Pad"). */
   sectionLabel?: string;
@@ -30,6 +33,28 @@ export default function TopBar({
   showMobileMenu = true,
   showCreateNew = true,
 }: TopBarProps) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function initials(): string {
+    if (user?.name) {
+      return user.name
+        .split(' ')
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join('');
+    }
+    if (user?.email) {
+      return user.email.slice(0, 2).toUpperCase();
+    }
+    return DEFAULT_USER_AVATAR_PLACEHOLDER;
+  }
+
+  async function handleLogout() {
+    await logout();
+    navigate('/auth', { replace: true });
+  }
+
   return (
     <header className="sticky top-0 z-50 bg-surface-bright border-b border-outline-variant shadow-sm flex justify-between items-center px-container-padding h-16 w-full">
       {/* Left section */}
@@ -84,8 +109,19 @@ export default function TopBar({
               Create New
             </button>
           )}
-          <div className="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-sm ml-2">
-            {DEFAULT_USER_AVATAR_PLACEHOLDER}
+          <div className="flex items-center gap-2 ml-2 group relative">
+            <div className="w-8 h-8 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-bold text-sm">
+              {initials()}
+            </div>
+            <button
+              className="p-2 text-on-surface-variant hover:bg-surface-container hover:text-error rounded-full transition-colors cursor-pointer"
+              onClick={handleLogout}
+              title="Sign out"
+              aria-label="Sign out"
+              type="button"
+            >
+              <span className="material-symbols-outlined">logout</span>
+            </button>
           </div>
         </div>
       )}

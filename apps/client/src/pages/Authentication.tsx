@@ -1,7 +1,67 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
 
 export default function Authentication() {
   const [formType, setFormType] = useState<'login' | 'register'>('login');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const { login, register } = useAuth();
+  const navigate = useNavigate();
+
+  function validate(): string | null {
+    if (!email.trim()) return 'Email is required.';
+    if (!EMAIL_REGEX.test(email.trim()))
+      return 'Please enter a valid email address.';
+    if (!password) return 'Password is required.';
+    if (password.length < MIN_PASSWORD_LENGTH)
+      return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+    if (formType === 'register' && !name.trim())
+      return 'Name is required.';
+    return null;
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (formType === 'register') {
+        await register(name, email, password);
+      } else {
+        await login(email, password);
+      }
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function switchForm(type: 'login' | 'register') {
+    setFormType(type);
+    setError(null);
+  }
+
+  const spinner = (
+    <span className="material-symbols-outlined text-[20px] animate-spin">
+      progress_activity
+    </span>
+  );
 
   return (
     <div className="h-full flex items-center justify-center p-4 md:p-8 ambient-bg">
@@ -51,20 +111,30 @@ export default function Authentication() {
           <div className="flex border-b border-outline-variant mb-8 w-full">
             <button
               className={`flex-1 pb-3 text-center font-label-lg text-label-lg transition-colors ${formType === 'login' ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-primary'}`}
-              onClick={() => setFormType('login')}
+              onClick={() => switchForm('login')}
+              type="button"
             >
               Log In
             </button>
             <button
               className={`flex-1 pb-3 text-center font-label-lg text-label-lg transition-colors ${formType === 'register' ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-primary'}`}
-              onClick={() => setFormType('register')}
+              onClick={() => switchForm('register')}
+              type="button"
             >
               Register
             </button>
           </div>
 
+          {/* Shared error banner */}
+          {error && (
+            <div className="mb-4 flex items-center gap-2 bg-error-container/10 border border-error/30 text-error rounded px-3 py-2 font-label-md text-label-md">
+              <span className="material-symbols-outlined text-[18px]">error</span>
+              <span>{error}</span>
+            </div>
+          )}
+
           {/* Login Form */}
-          <form className={`space-y-6 ${formType === 'login' ? 'block' : 'hidden'}`}>
+          <form className={`space-y-6 ${formType === 'login' ? 'block' : 'hidden'}`} onSubmit={handleSubmit}>
             <div>
               <h2 className="font-headline-md text-headline-md text-on-surface mb-2">Welcome Back</h2>
               <p className="font-body-md text-body-md text-on-surface-variant">Enter your credentials to access your workspace.</p>
@@ -74,7 +144,16 @@ export default function Authentication() {
                 <label className="font-label-md text-label-md text-on-surface" htmlFor="login-email">Email Address</label>
                 <div className="relative input-glow rounded transition-all">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">mail</span>
-                  <input className="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0" id="login-email" placeholder="name@company.com" type="email" />
+                  <input
+                    className="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0"
+                    id="login-email"
+                    placeholder="name@company.com"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    required
+                  />
                 </div>
               </div>
               <div className="flex flex-col gap-1">
@@ -84,20 +163,31 @@ export default function Authentication() {
                 </div>
                 <div className="relative input-glow rounded transition-all">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">lock</span>
-                  <input className="w-full pl-10 pr-10 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0" id="login-password" placeholder="••••••••" type="password" />
-                  <button className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors" type="button">
-                    <span className="material-symbols-outlined text-[20px]">visibility_off</span>
-                  </button>
+                  <input
+                    className="w-full pl-10 pr-10 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0"
+                    id="login-password"
+                    placeholder="••••••••"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
                 </div>
               </div>
             </div>
-            <button className="w-full bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg py-3 rounded shadow-sm hover:shadow-md transition-all duration-200" type="button">
+            <button
+              className="w-full bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg py-3 rounded shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              type="submit"
+              disabled={submitting}
+            >
+              {submitting && spinner}
               Sign In to Workspace
             </button>
           </form>
 
           {/* Registration Form */}
-          <form className={`space-y-6 ${formType === 'register' ? 'block' : 'hidden'}`}>
+          <form className={`space-y-6 ${formType === 'register' ? 'block' : 'hidden'}`} onSubmit={handleSubmit}>
             <div>
               <h2 className="font-headline-md text-headline-md text-on-surface mb-2">Create Account</h2>
               <p className="font-body-md text-body-md text-on-surface-variant">Set up your professional suite profile.</p>
@@ -107,25 +197,57 @@ export default function Authentication() {
                 <label className="font-label-md text-label-md text-on-surface" htmlFor="reg-name">Full Name</label>
                 <div className="relative input-glow rounded transition-all">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">person</span>
-                  <input className="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0" id="reg-name" placeholder="Jane Doe" type="text" />
+                  <input
+                    className="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0"
+                    id="reg-name"
+                    placeholder="Jane Doe"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoComplete="name"
+                    required
+                  />
                 </div>
               </div>
               <div className="flex flex-col gap-1">
                 <label className="font-label-md text-label-md text-on-surface" htmlFor="reg-email">Work Email</label>
                 <div className="relative input-glow rounded transition-all">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">mail</span>
-                  <input className="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0" id="reg-email" placeholder="jane@company.com" type="email" />
+                  <input
+                    className="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0"
+                    id="reg-email"
+                    placeholder="jane@company.com"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    required
+                  />
                 </div>
               </div>
               <div className="flex flex-col gap-1">
                 <label className="font-label-md text-label-md text-on-surface" htmlFor="reg-password">Password</label>
                 <div className="relative input-glow rounded transition-all">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">lock</span>
-                  <input className="w-full pl-10 pr-10 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0" id="reg-password" placeholder="Create a strong password" type="password" />
+                  <input
+                    className="w-full pl-10 pr-10 py-2 bg-surface-container-lowest border border-outline-variant rounded font-body-md text-on-surface focus:outline-none focus:ring-0"
+                    id="reg-password"
+                    placeholder="Create a strong password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    required
+                  />
                 </div>
               </div>
             </div>
-            <button className="w-full bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg py-3 rounded shadow-sm hover:shadow-md transition-all duration-200" type="button">
+            <button
+              className="w-full bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg py-3 rounded shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              type="submit"
+              disabled={submitting}
+            >
+              {submitting && spinner}
               Register Account
             </button>
           </form>
