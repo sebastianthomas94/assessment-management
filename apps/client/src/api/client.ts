@@ -1,10 +1,14 @@
 /**
  * Shared `fetch` wrapper for authenticated API calls.
  *
- * Uses **relative** `/api` paths so the Vite dev-server proxy (configured in
- * `vite.config.ts`) forwards requests to the Express backend, keeping cookies
- * and CORS simple. Define `VITE_Backend_Base_url` in the client env to hit a
- * different origin (e.g. a deployed backend) — same pattern as AuthContext.
+ * Uses **relative** `/api` paths so requests stay same-origin:
+ * - Dev: the Vite dev-server proxy (vite.config.ts) forwards to Express.
+ * - Prod: Vercel's external rewrite (vercel.json) proxies to the Render API,
+ *   so cookies are first-party and Chrome's third-party cookie blocking
+ *   doesn't apply.
+ *
+ * Define `VITE_Backend_Base_url` only for local dev when you want to hit a
+ * backend that isn't behind the Vite proxy.
  */
 const API_BASE = import.meta.env.VITE_Backend_Base_url ?? "";
 
