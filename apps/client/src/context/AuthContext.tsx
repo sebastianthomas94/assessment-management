@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { apiFetch } from "../api/client";
 
 export interface AuthUser {
   id: string;
@@ -23,29 +24,6 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-const BACKEND_BASE_URL =
-  import.meta.env.VITE_Backend_Base_url ?? "http://localhost:5000";
-
-async function apiFetch<T>(
-  url: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const res = await fetch(`${BACKEND_BASE_URL}${url}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-
-  const data = (await res.json().catch(() => null)) as
-    | (T & { message?: string })
-    | null;
-
-  if (!res.ok) {
-    throw new Error(data?.message ?? "Something went wrong. Please try again.");
-  }
-  return data as T;
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
