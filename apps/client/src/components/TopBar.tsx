@@ -10,6 +10,8 @@ interface TopBarProps {
   searchPlaceholder?: string;
   /** Whether to show the mobile menu button (left side). */
   showMobileMenu?: boolean;
+  /** Called when the mobile menu (hamburger) button is clicked. */
+  onMenuClick?: () => void;
   /** Retained for API compatibility. */
   showCreateNew?: boolean;
 }
@@ -21,7 +23,7 @@ const DEFAULT_USER_AVATAR_PLACEHOLDER = 'AU';
  * right. Decorative placeholders (fake nav, search, notifications) were removed
  * to keep the UI straightforward.
  */
-export default function TopBar({ sectionLabel, rightSlot, showMobileMenu = true }: TopBarProps) {
+export default function TopBar({ sectionLabel, rightSlot, showMobileMenu = true, onMenuClick }: TopBarProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -49,7 +51,12 @@ export default function TopBar({ sectionLabel, rightSlot, showMobileMenu = true 
       {/* Left section */}
       <div className="flex items-center gap-4">
         {showMobileMenu && (
-          <button className="md:hidden text-on-surface-variant hover:bg-surface-container rounded-full p-2 transition-colors">
+          <button
+            className="md:hidden text-on-surface-variant hover:bg-surface-container rounded-full p-2 transition-colors"
+            onClick={onMenuClick}
+            aria-label="Open menu"
+            type="button"
+          >
             <span className="material-symbols-outlined">menu</span>
           </button>
         )}
